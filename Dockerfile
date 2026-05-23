@@ -10,15 +10,15 @@ WORKDIR /src
 
 # Cache modules layer separately from source.
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
     go mod download
 
 COPY . .
 
 # CGO disabled: libsql-client-go is pure Go, so we can produce a static binary
 # that runs on a scratch/distroless base.
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=gobuild,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w" -o /out/bot ./cmd/bot
 
@@ -38,7 +38,7 @@ COPY --from=builder /out/bot /app/bot
 #            is invisible to log aggregators and lost on container restart.
 ENV ENV=""
 
-# Volume hook for file:-backed SQLite deployments. Harmless if you use Turso.
-VOLUME ["/data"]
+# For file:-backed SQLite, attach a Railway Volume mounted at /data and set
+# DB_URL=file:/data/olx.db. Otherwise use Turso libsql://... — no volume needed.
 
 ENTRYPOINT ["/app/bot"]
