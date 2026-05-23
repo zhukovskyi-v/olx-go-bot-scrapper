@@ -56,13 +56,6 @@ func extractID(url string) string {
 	return m[1]
 }
 
-func firstImage(images []string) string {
-	if len(images) == 0 {
-		return ""
-	}
-	return images[0]
-}
-
 func priceString(p json.Number, currency string) string {
 	if p == "" {
 		return ""
@@ -103,7 +96,7 @@ func ParseList(doc *goquery.Document) ([]domain.Ad, error) {
 				Currency: o.PriceCurrency,
 				City:     city,
 				District: o.AreaServed.Name,
-				Image:    firstImage(o.Image),
+				Images:   o.Image,
 			})
 		}
 		return false
@@ -139,7 +132,7 @@ func ParseDetail(doc *goquery.Document) (domain.Ad, error) {
 			Price:       priceString(pd.Offers.Price, pd.Offers.PriceCurrency),
 			Currency:    pd.Offers.PriceCurrency,
 			District:    pd.Offers.AreaServed.Name,
-			Image:       firstImage(pd.Image),
+			Images:      pd.Image,
 			Description: pd.Description,
 		}
 		return false

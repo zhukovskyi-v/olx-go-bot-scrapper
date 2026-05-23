@@ -133,8 +133,8 @@ func (s *Supervisor) pollOnce(ctx context.Context, w domain.Watch) error {
 				if detail.District != "" {
 					ad.District = detail.District
 				}
-				if detail.Image != "" {
-					ad.Image = detail.Image
+				if len(detail.Images) > 0 {
+					ad.Images = detail.Images
 				}
 				if detail.Title != "" {
 					ad.Title = detail.Title

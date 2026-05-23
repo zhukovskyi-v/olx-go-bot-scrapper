@@ -8,6 +8,6 @@ type Ad struct {
 	Currency    string
 	City        string
 	District    string
-	Image       string
+	Images      []string
 	Description string
 }

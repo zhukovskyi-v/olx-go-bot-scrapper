@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.vscode
+*.md
+LICENSE
+Dockerfile
+.dockerignore
+.env
+.env.*
+*.db
+*.db-journal
+slog.log
+bot
+main

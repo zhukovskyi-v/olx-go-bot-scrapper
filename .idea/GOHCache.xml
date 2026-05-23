@@ -17,14 +17,40 @@
             </set>
           </value>
         </entry>
+        <entry key="Scraper">
+          <value>
+            <set>
+              <option value="file://$PROJECT_DIR$/internal/scraper/scraper.go" />
+            </set>
+          </value>
+        </entry>
       </map>
     </option>
     <option name="scannedPathMapping">
       <map>
+        <entry key="file://$PROJECT_DIR$/cmd/bot/main.go">
+          <value>
+            <ScannedPath>
+              <option name="lastModified" value="1779525663078" />
+            </ScannedPath>
+          </value>
+        </entry>
         <entry key="file://$PROJECT_DIR$/internal/olx.go">
           <value>
             <ScannedPath>
               <option name="lastModified" value="1779516060852" />
+            </ScannedPath>
+          </value>
+        </entry>
+        <entry key="file://$PROJECT_DIR$/internal/scraper/scraper.go">
+          <value>
+            <ScannedPath>
+              <option name="lastModified" value="1779525648690" />
+              <option name="schema">
+                <list>
+                  <option value="Scraper" />
+                </list>
+              </option>
             </ScannedPath>
           </value>
         </entry>
@@ -79,6 +105,7 @@
       <map>
         <entry key="pretty_handler" value="PrettyHandler" />
         <entry key="published" value="Published" />
+        <entry key="scraper" value="Scraper" />
       </map>
     </option>
     <option name="lastTimeChecked" value="1779516101998" />

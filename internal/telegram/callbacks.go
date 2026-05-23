@@ -5,8 +5,11 @@ import (
 	"strings"
 
 	"github.com/fentezi/olx-scraper/internal/i18n"
+	"github.com/fentezi/olx-scraper/internal/notifier"
 	tele "gopkg.in/telebot.v3"
 )
+
+const textMsgMaxRunes = 4000
 
 // Inline button uniques (callback routing keys).
 const (
@@ -33,6 +36,61 @@ func (b *Bot) registerCallbacks() {
 	b.tb.Handle(&tele.InlineButton{Unique: cbFilterClear}, b.cbFilterClear)
 	b.tb.Handle(&tele.InlineButton{Unique: cbFilterCancel}, b.cbFilterCancel)
 	b.tb.Handle(&tele.InlineButton{Unique: cbLangSet}, b.cbLangSet)
+	b.tb.Handle(&tele.InlineButton{Unique: notifier.CbShowFullDesc}, b.cbShowFullDesc)
+}
+
+func (b *Bot) cbShowFullDesc(c tele.Context) error {
+	userID := c.Sender().ID
+	lang := b.UserLang(userID)
+	_ = c.Respond()
+	adID := strings.TrimSpace(c.Data())
+	if adID == "" {
+		return c.Send(i18n.T(lang, "ad.full_desc_unavailable"))
+	}
+	desc, ok := b.notifier.GetDescription(adID)
+	if !ok || desc == "" {
+		return c.Send(i18n.T(lang, "ad.full_desc_unavailable"))
+	}
+	opts := &tele.SendOptions{DisableWebPagePreview: true}
+	for _, chunk := range splitTextChunks(desc, textMsgMaxRunes) {
+		if err := c.Send(chunk, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// splitTextChunks breaks s into runs of at most maxRunes runes, preferring
+// paragraph (\n\n) then line then space boundaries.
+func splitTextChunks(s string, maxRunes int) []string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return []string{s}
+	}
+	var out []string
+	for len(r) > maxRunes {
+		cut := maxRunes
+		for i := cut - 1; i > cut*7/10; i-- {
+			if r[i] == '\n' {
+				cut = i + 1
+				break
+			}
+		}
+		if cut == maxRunes {
+			for i := cut - 1; i > cut*7/10; i-- {
+				if r[i] == ' ' {
+					cut = i + 1
+					break
+				}
+			}
+		}
+		out = append(out, string(r[:cut]))
+		r = r[cut:]
+	}
+	if len(r) > 0 {
+		out = append(out, string(r))
+	}
+	return out
 }
 
 func parseCBLocalID(c tele.Context) (int, bool) {
