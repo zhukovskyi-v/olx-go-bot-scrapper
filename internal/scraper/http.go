@@ -1,4 +1,4 @@
-package utils
+package scraper
 
 import (
 	"fmt"
@@ -6,17 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/PuerkitoBio/goquery"
 )
-
-var httpClient = &http.Client{
-	Timeout: 20 * time.Second,
-	Transport: &http.Transport{
-		MaxIdleConnsPerHost: 4,
-		IdleConnTimeout:     90 * time.Second,
-	},
-}
 
 type RateLimitError struct {
 	RetryAfter time.Duration
@@ -36,6 +26,16 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("http %d for %s", e.Status, e.URL)
 }
 
+func defaultHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 20 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 4,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
+}
+
 func parseRetryAfter(h string) time.Duration {
 	if h == "" {
 		return 0
@@ -52,7 +52,7 @@ func parseRetryAfter(h string) time.Duration {
 	return 0
 }
 
-func fetchHTML(url string) (io.ReadCloser, error) {
+func (s *Scraper) fetchHTML(url string) (io.ReadCloser, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
@@ -61,7 +61,7 @@ func fetchHTML(url string) (io.ReadCloser, error) {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
 	req.Header.Set("Accept-Language", "uk-UA,uk;q=0.9")
 
-	resp, err := httpClient.Do(req)
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
@@ -79,14 +79,4 @@ func fetchHTML(url string) (io.ReadCloser, error) {
 		return nil, &RateLimitError{RetryAfter: retry, Status: resp.StatusCode}
 	}
 	return nil, &HTTPError{Status: resp.StatusCode, URL: url}
-}
-
-func FetchAndParseHTML(url string) (*goquery.Document, error) {
-	html, err := fetchHTML(url)
-	if err != nil {
-		return nil, err
-	}
-	defer html.Close()
-
-	return goquery.NewDocumentFromReader(html)
 }

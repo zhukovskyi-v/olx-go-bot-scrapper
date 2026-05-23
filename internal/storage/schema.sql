@@ -15,3 +15,9 @@ CREATE TABLE IF NOT EXISTS seen_ads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_seen_user ON seen_ads(user_id);
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id    INTEGER PRIMARY KEY,
+    language   TEXT    NOT NULL DEFAULT 'uk',
+    created_at INTEGER NOT NULL
+);

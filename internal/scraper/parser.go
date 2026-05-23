@@ -1,4 +1,4 @@
-package internal
+package scraper
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/fentezi/olx-scraper/models"
+	"github.com/fentezi/olx-scraper/internal/domain"
 )
 
 type areaServed struct {
@@ -76,12 +76,12 @@ func priceString(p json.Number, currency string) string {
 	return fmt.Sprintf("%s %s", p.String(), currency)
 }
 
-func ParseList(doc *goquery.Document) ([]models.Ad, error) {
+func ParseList(doc *goquery.Document) ([]domain.Ad, error) {
 	if doc == nil {
 		return nil, errors.New("nil document")
 	}
 
-	var ads []models.Ad
+	var ads []domain.Ad
 	var found bool
 
 	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
@@ -95,7 +95,7 @@ func ParseList(doc *goquery.Document) ([]models.Ad, error) {
 		found = true
 		city := pl.Offers.AreaServed.Name
 		for _, o := range pl.Offers.Offers {
-			ads = append(ads, models.Ad{
+			ads = append(ads, domain.Ad{
 				ID:       extractID(o.URL),
 				URL:      o.URL,
 				Title:    o.Name,
@@ -115,12 +115,12 @@ func ParseList(doc *goquery.Document) ([]models.Ad, error) {
 	return ads, nil
 }
 
-func ParseDetail(doc *goquery.Document) (models.Ad, error) {
+func ParseDetail(doc *goquery.Document) (domain.Ad, error) {
 	if doc == nil {
-		return models.Ad{}, errors.New("nil document")
+		return domain.Ad{}, errors.New("nil document")
 	}
 
-	var ad models.Ad
+	var ad domain.Ad
 	var found bool
 
 	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
@@ -132,7 +132,7 @@ func ParseDetail(doc *goquery.Document) (models.Ad, error) {
 			return true
 		}
 		found = true
-		ad = models.Ad{
+		ad = domain.Ad{
 			ID:          pd.SKU,
 			URL:         pd.URL,
 			Title:       pd.Name,
@@ -146,7 +146,7 @@ func ParseDetail(doc *goquery.Document) (models.Ad, error) {
 	})
 
 	if !found {
-		return models.Ad{}, errors.New("no Product JSON-LD block with sku found")
+		return domain.Ad{}, errors.New("no Product JSON-LD block with sku found")
 	}
 	return ad, nil
 }

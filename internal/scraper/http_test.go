@@ -1,4 +1,4 @@
-package utils
+package scraper
 
 import (
 	"errors"
@@ -26,12 +26,14 @@ func (s *stubRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-func TestFetchHTML_RateLimitedSeconds(t *testing.T) {
-	old := httpClient
-	defer func() { httpClient = old }()
-	httpClient = &http.Client{Transport: &stubRT{status: 429, retryAfter: "7"}}
+func newStubScraper(rt http.RoundTripper) *Scraper {
+	return &Scraper{HTTPClient: &http.Client{Transport: rt}}
+}
 
-	_, err := fetchHTML("http://example.invalid/")
+func TestFetchHTML_RateLimitedSeconds(t *testing.T) {
+	s := newStubScraper(&stubRT{status: 429, retryAfter: "7"})
+
+	_, err := s.fetchHTML("http://example.invalid/")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -48,11 +50,9 @@ func TestFetchHTML_RateLimitedSeconds(t *testing.T) {
 }
 
 func TestFetchHTML_RateLimitedDefaults(t *testing.T) {
-	old := httpClient
-	defer func() { httpClient = old }()
-	httpClient = &http.Client{Transport: &stubRT{status: 503}}
+	s := newStubScraper(&stubRT{status: 503})
 
-	_, err := fetchHTML("http://example.invalid/")
+	_, err := s.fetchHTML("http://example.invalid/")
 	var rl *RateLimitError
 	if !errors.As(err, &rl) {
 		t.Fatalf("expected *RateLimitError, got %v", err)
@@ -63,11 +63,9 @@ func TestFetchHTML_RateLimitedDefaults(t *testing.T) {
 }
 
 func TestFetchHTML_OtherStatusReturnsHTTPError(t *testing.T) {
-	old := httpClient
-	defer func() { httpClient = old }()
-	httpClient = &http.Client{Transport: &stubRT{status: 403}}
+	s := newStubScraper(&stubRT{status: 403})
 
-	_, err := fetchHTML("http://example.invalid/")
+	_, err := s.fetchHTML("http://example.invalid/")
 	var he *HTTPError
 	if !errors.As(err, &he) {
 		t.Fatalf("expected *HTTPError, got %v", err)

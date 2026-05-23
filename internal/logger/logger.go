@@ -60,9 +60,9 @@ func NewPrettyHandler(out io.Writer, opts slog.HandlerOptions) *PrettyHandler {
 	}
 }
 
-func Logger() *slog.Logger {
-	env := getEnvVariable("ENV")
-
+// New returns a slog.Logger configured for the given env tag
+// ("local" → pretty console, "prod" → JSON file, anything else → text stdout debug).
+func New(env string) *slog.Logger {
 	var handler slog.Handler
 	switch env {
 	case "local":
@@ -72,12 +72,7 @@ func Logger() *slog.Logger {
 	default:
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 	}
-
 	return slog.New(handler)
-}
-
-func getEnvVariable(key string) string {
-	return os.Getenv(key)
 }
 
 func newConsoleHandler(level slog.Level) slog.Handler {
