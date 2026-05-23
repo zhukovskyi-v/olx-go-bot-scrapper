@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/joho/godotenv"
 )
 
 type PrettyHandler struct {
@@ -78,11 +77,6 @@ func Logger() *slog.Logger {
 }
 
 func getEnvVariable(key string) string {
-	err := godotenv.Load()
-	if err != nil {
-		return ""
-	}
-
 	return os.Getenv(key)
 }
 

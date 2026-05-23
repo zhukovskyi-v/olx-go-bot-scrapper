@@ -1,78 +1,152 @@
 package internal
 
 import (
-	"log/slog"
-	"strings"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/fentezi/olx-scraper/models"
 )
 
-// printAdTitles prints the titles and times of ads in the document.
-// It checks if the document and selection are not nil, and if the title
-// and time of each ad are not nil. If any of these checks fail, it exits
-// the program with an error.
-func returnPublished(doc *goquery.Document, log *slog.Logger) models.Published {
-	// Check if the document is nil
-	if doc == nil {
-		log.Error("document is nil")
-		return models.Published{}
-	}
-
-	// Find the selection of ads
-	selection := doc.Find("div#div-gpt-liting-after-promoted").Next()
-
-	if selection == nil {
-		log.Error("selection is nil")
-
-	}
-
-	// Find the title of the ad
-	title := selection.Find("h6")
-
-	// Check if the title is nil
-	if title == nil {
-		log.Warn("title is nil")
-	}
-
-	// Get the text of the title
-	titleText := title.Text()
-
-	// Find the time of the ad
-	timeAttr := selection.Find(`p[data-testid="location-date"]`)
-
-	// Check if the time is nil
-	if timeAttr == nil {
-		log.Warn("time is nil")
-	}
-	price := strings.Replace(selection.Find(`p[data-testid='ad-price'].css-tyui9s.er34gjf0`).Text(), ".css-1vxklie{color:#7F9799;font-size:12px;line-height:16px;font-weight:100;display:block;width:100%;text-align:right;}Договірна", "Договірна", -1)
-	href, _ := selection.Find(`a.css-z3gu2d`).Attr("href")
-
-	// Get the text of the time
-	timeSplit := strings.Split(timeAttr.Text(), " ")
-	timeText := timeSplit[len(timeSplit)-1]
-	
-
-	urlImage, _ := selection.Find(`div.css-gl6djm > img`).Attr("src")
-	citySplit := strings.Split(timeAttr.Text(), " - ")
-	city := citySplit[0]
-
-	return models.Published{
-		Title:         titleText,
-		Image:         urlImage,
-		Price:         price,
-		City:          city,
-		HrefPublished: href,
-		TimePublished: timeText,
-	}
+type areaServed struct {
+	Name string `json:"name"`
 }
 
-// getPublished fetches and returns the published ad from the HTML document.
-//
-// It takes a goquery.Document pointer as input and returns a Published struct.
-// It calls the returnPublished function to fetch and parse the HTML content.
-func GetPublished(doc *goquery.Document, log slog.Logger) models.Published {
-	// Call the returnPublished function to fetch and parse the HTML content.
-	// It returns a Published struct.
-	return returnPublished(doc, &log)
+type offer struct {
+	Type          string      `json:"@type"`
+	Name          string      `json:"name"`
+	URL           string      `json:"url"`
+	Image         []string    `json:"image"`
+	Price         json.Number `json:"price"`
+	PriceCurrency string      `json:"priceCurrency"`
+	AreaServed    areaServed  `json:"areaServed"`
+}
+
+type aggregateOffer struct {
+	Type       string     `json:"@type"`
+	AreaServed areaServed `json:"areaServed"`
+	Offers     []offer    `json:"offers"`
+}
+
+type productList struct {
+	Type   string         `json:"@type"`
+	Offers aggregateOffer `json:"offers"`
+}
+
+type productDetail struct {
+	Type        string   `json:"@type"`
+	Name        string   `json:"name"`
+	URL         string   `json:"url"`
+	Image       []string `json:"image"`
+	Description string   `json:"description"`
+	SKU         string   `json:"sku"`
+	Offers      offer    `json:"offers"`
+}
+
+var idRegex = regexp.MustCompile(`-ID([A-Za-z0-9]+)\.html`)
+
+func extractID(url string) string {
+	m := idRegex.FindStringSubmatch(url)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+
+func firstImage(images []string) string {
+	if len(images) == 0 {
+		return ""
+	}
+	return images[0]
+}
+
+func priceString(p json.Number, currency string) string {
+	if p == "" {
+		return ""
+	}
+	if f, err := p.Float64(); err == nil {
+		whole := int64(f)
+		if float64(whole) == f {
+			return fmt.Sprintf("%s %s", strconv.FormatInt(whole, 10), currency)
+		}
+	}
+	return fmt.Sprintf("%s %s", p.String(), currency)
+}
+
+func ParseList(doc *goquery.Document) ([]models.Ad, error) {
+	if doc == nil {
+		return nil, errors.New("nil document")
+	}
+
+	var ads []models.Ad
+	var found bool
+
+	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		var pl productList
+		if err := json.Unmarshal([]byte(s.Text()), &pl); err != nil {
+			return true
+		}
+		if pl.Type != "Product" || pl.Offers.Type != "AggregateOffer" {
+			return true
+		}
+		found = true
+		city := pl.Offers.AreaServed.Name
+		for _, o := range pl.Offers.Offers {
+			ads = append(ads, models.Ad{
+				ID:       extractID(o.URL),
+				URL:      o.URL,
+				Title:    o.Name,
+				Price:    priceString(o.Price, o.PriceCurrency),
+				Currency: o.PriceCurrency,
+				City:     city,
+				District: o.AreaServed.Name,
+				Image:    firstImage(o.Image),
+			})
+		}
+		return false
+	})
+
+	if !found {
+		return nil, errors.New("no AggregateOffer JSON-LD block found")
+	}
+	return ads, nil
+}
+
+func ParseDetail(doc *goquery.Document) (models.Ad, error) {
+	if doc == nil {
+		return models.Ad{}, errors.New("nil document")
+	}
+
+	var ad models.Ad
+	var found bool
+
+	doc.Find(`script[type="application/ld+json"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		var pd productDetail
+		if err := json.Unmarshal([]byte(s.Text()), &pd); err != nil {
+			return true
+		}
+		if pd.Type != "Product" || pd.SKU == "" {
+			return true
+		}
+		found = true
+		ad = models.Ad{
+			ID:          pd.SKU,
+			URL:         pd.URL,
+			Title:       pd.Name,
+			Price:       priceString(pd.Offers.Price, pd.Offers.PriceCurrency),
+			Currency:    pd.Offers.PriceCurrency,
+			District:    pd.Offers.AreaServed.Name,
+			Image:       firstImage(pd.Image),
+			Description: pd.Description,
+		}
+		return false
+	})
+
+	if !found {
+		return models.Ad{}, errors.New("no Product JSON-LD block with sku found")
+	}
+	return ad, nil
 }

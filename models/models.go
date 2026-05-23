@@ -1,10 +1,13 @@
 package models
 
-type Published struct {
-	Title         string
-	Image         string
-	City          string
-	Price         string
-	HrefPublished string
-	TimePublished string
+type Ad struct {
+	ID          string
+	URL         string
+	Title       string
+	Price       string
+	Currency    string
+	City        string
+	District    string
+	Image       string
+	Description string
 }
