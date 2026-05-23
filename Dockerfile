@@ -10,16 +10,13 @@ WORKDIR /src
 
 # Cache modules layer separately from source.
 COPY go.mod go.sum ./
-RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
-    go mod download
+RUN go mod download
 
 COPY . .
 
 # CGO disabled: libsql-client-go is pure Go, so we can produce a static binary
 # that runs on a scratch/distroless base.
-RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
-    --mount=type=cache,id=gobuild,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w" -o /out/bot ./cmd/bot
 
 # Runtime stage — distroless static carries ca-certificates (needed for HTTPS
