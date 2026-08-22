@@ -1,6 +1,8 @@
 terraform {
   required_version = ">= 1.6"
 
+  cloud {}
+
   required_providers {
     railway = {
       source  = "terraform-community-providers/railway"

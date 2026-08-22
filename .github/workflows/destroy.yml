@@ -76,6 +76,17 @@ jobs:
           terraform_version: '1.14.6'
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+      # Guards the regression that broke redeploys: dropping `cloud {}` from
+      # versions.tf moves state onto the ephemeral runner, so every run creates a
+      # brand new Railway project. Checked before init — afterwards the local
+      # backend is already in place.
+      - name: Assert remote state configured
+        run: |
+          grep -q 'cloud {}' versions.tf || {
+            echo "::error::cloud {} missing from versions.tf — CI would create a new Railway project on every run"
+            exit 1
+          }
+
       - name: Init
         run: terraform init
 
