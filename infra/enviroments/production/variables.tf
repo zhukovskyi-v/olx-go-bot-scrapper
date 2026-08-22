@@ -12,7 +12,7 @@ variable "workspace_id" {
 
 variable "project_name" {
   type        = string
-  default     = "olx-scraper-local"
+  default     = "olx scraper production"
   description = "Name of the Railway project."
 }
 
