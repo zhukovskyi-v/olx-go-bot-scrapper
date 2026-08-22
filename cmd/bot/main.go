@@ -47,7 +47,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	scr := scraper.New()
+	scr, err := scraper.New()
+	if err != nil {
+		log.Error("failed to init scraper", logger.Err(err))
+		os.Exit(1)
+	}
 	notif := notifier.New(tb, log)
 
 	// Bot needs Supervisor for handler-driven Spawn/Cancel; Supervisor needs

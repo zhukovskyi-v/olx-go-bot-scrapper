@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"math/rand"
 	"time"
@@ -29,8 +30,15 @@ func (s *Supervisor) parseLoop(ctx context.Context, id int64, listURL string) {
 
 		pollErr := s.pollOnce(ctx, w)
 		if pollErr != nil {
+			// A fetch aborted by shutdown is not an OLX failure: counting it
+			// would push the watch towards the "OLX unavailable" notice on the
+			// way out. Now that fetches take the context, this can happen.
+			if ctx.Err() != nil {
+				return
+			}
 			consecutiveFailures++
-			s.log.Warn("poll failed", "id", id, "attempt", consecutiveFailures, "err", pollErr.Error())
+			s.logFetchFailure(ctx, "poll failed", pollErr,
+				"id", id, "attempt", consecutiveFailures)
 
 			if consecutiveFailures == notifyFailureCount {
 				s.notifier.SendText(ctx, id, i18n.T(s.langOf(id), "notify.olx_unavailable"))
@@ -87,16 +95,21 @@ func (s *Supervisor) pollOnce(ctx context.Context, w domain.Watch) error {
 		Exclude:  w.ExcludeKw,
 	}
 
+	// Referer of the page being fetched: empty for page 1 (a directly opened
+	// search URL), the previous page once paginating, which is what clicking
+	// through the result pages looks like.
+	referer := ""
 	for page := 1; page <= maxPages; page++ {
 		pageURL, err := scraper.PaginatedURL(w.URL, page)
 		if err != nil {
 			return err
 		}
 
-		ads, err := s.scraper.FetchList(pageURL)
+		ads, err := s.scraper.FetchList(ctx, pageURL, referer)
 		if err != nil {
 			return err
 		}
+		referer = pageURL
 
 		sawSeen := false
 		for _, ad := range ads {
@@ -120,9 +133,10 @@ func (s *Supervisor) pollOnce(ctx context.Context, w domain.Watch) error {
 				continue
 			}
 
-			detail, derr := s.scraper.FetchDetail(ad.URL)
+			detail, derr := s.scraper.FetchDetail(ctx, ad.URL, pageURL)
 			if derr != nil {
-				s.log.Warn("detail fetch failed, sending list info", "id", w.UserID, "url", ad.URL, "err", derr.Error())
+				s.logFetchFailure(ctx, "detail fetch failed, sending list info", derr,
+					"id", w.UserID, "url", ad.URL)
 			} else {
 				if detail.Description != "" {
 					ad.Description = detail.Description
@@ -162,6 +176,25 @@ func (s *Supervisor) pollOnce(ctx context.Context, w domain.Watch) error {
 		}
 	}
 	return nil
+}
+
+// logFetchFailure logs a scrape failure with whatever the error carries: the
+// HTTP status, and for a blocked or error page the first bytes of the body,
+// which is the only thing separating an anti-bot wall from a real outage. A
+// transport timeout is a routine blip and logs below a block.
+func (s *Supervisor) logFetchFailure(ctx context.Context, msg string, err error, args ...any) {
+	level := slog.LevelWarn
+	if scraper.IsTimeout(err) {
+		level = slog.LevelInfo
+	}
+	args = append(args, "err", err.Error())
+	if status := scraper.StatusOf(err); status != 0 {
+		args = append(args, "status", status)
+	}
+	if snippet := scraper.BodySnippetOf(err); snippet != "" {
+		args = append(args, "body", snippet)
+	}
+	s.log.Log(ctx, level, msg, args...)
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {

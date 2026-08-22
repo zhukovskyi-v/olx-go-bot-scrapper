@@ -1,8 +1,7 @@
 package scraper
 
 import (
-	"io"
-	"net/http"
+	"context"
 	"net/url"
 	"strconv"
 
@@ -11,37 +10,40 @@ import (
 )
 
 type Scraper struct {
-	HTTPClient *http.Client
+	httpClient browserHTTPClient
 }
 
-func New() *Scraper {
-	return &Scraper{HTTPClient: defaultHTTPClient()}
-}
-
-func (s *Scraper) fetchAndParse(rawURL string) (*goquery.Document, error) {
-	body, err := s.fetchHTML(rawURL)
+func New() (*Scraper, error) {
+	client, err := newBrowserHTTPClient()
 	if err != nil {
 		return nil, err
 	}
-	defer func(body io.ReadCloser) {
-		err := body.Close()
-		if err != nil {
+	return &Scraper{httpClient: client}, nil
+}
 
-		}
-	}(body)
+func (s *Scraper) fetchAndParse(ctx context.Context, rawURL, referer string) (*goquery.Document, error) {
+	body, err := s.fetchHTML(ctx, rawURL, referer)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
 	return goquery.NewDocumentFromReader(body)
 }
 
-func (s *Scraper) FetchList(rawURL string) ([]domain.Ad, error) {
-	doc, err := s.fetchAndParse(rawURL)
+// FetchList reads a search-results page. referer is the page it was reached
+// from — empty for the first page of a poll, the previous page when paginating.
+func (s *Scraper) FetchList(ctx context.Context, rawURL, referer string) ([]domain.Ad, error) {
+	doc, err := s.fetchAndParse(ctx, rawURL, referer)
 	if err != nil {
 		return nil, err
 	}
 	return ParseList(doc)
 }
 
-func (s *Scraper) FetchDetail(rawURL string) (domain.Ad, error) {
-	doc, err := s.fetchAndParse(rawURL)
+// FetchDetail reads a single ad page. referer is the list page the ad was found
+// on, which is what makes the request look like a clicked search result.
+func (s *Scraper) FetchDetail(ctx context.Context, rawURL, referer string) (domain.Ad, error) {
+	doc, err := s.fetchAndParse(ctx, rawURL, referer)
 	if err != nil {
 		return domain.Ad{}, err
 	}

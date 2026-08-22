@@ -35,7 +35,7 @@ internal/
                  filter.go  Filter, Accept, NormalizeKeywords, ParsePriceRange.
   scraper/     OLX HTTP + JSON-LD parsing.
                  scraper.go  Scraper struct, FetchList, FetchDetail, PaginatedURL.
-                 http.go     fetchHTML, RateLimitError, HTTPError.
+                 http.go     TLS-fingerprinted browser client, fetchHTML, errors.
                  parser.go   ParseList, ParseDetail.
   notifier/    Telegram send + rate limiting.
                  telegram.go  Notifier struct, SendAd, SendText.
