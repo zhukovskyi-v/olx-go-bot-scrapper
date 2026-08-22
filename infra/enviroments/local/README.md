@@ -56,6 +56,13 @@ fails if the build fails. Set it to `--detach` for fire-and-forget.
 
 - `terraform.tfstate` holds `db_url` and `railway_token` in plaintext. It is
   gitignored; keep it off shared machines.
+- **State is what makes the project reusable.** This env keeps state in
+  `terraform.tfstate` next to these files. Lose that file and the next `apply`
+  creates a *brand new* Railway project instead of adopting the existing one —
+  that is how a duplicate `olx-scraper-local` appeared and ate the Free plan
+  quota. Recover with `terraform import railway_project.this <project_id>`
+  before applying, never by applying on empty state. `production` is immune:
+  its state lives in HCP Terraform (`cloud {}` in `versions.tf`).
 - Build config (Dockerfile path, healthcheck, restart policy) lives in
   `railway.api.json` / `railway.worker.json` at the repo root — the provider has
   no fields for them.

@@ -7,7 +7,7 @@ variable "railway_token" {
 variable "workspace_id" {
   type        = string
   default     = null
-  description = "Railway workspace the project belongs to. Leave unset — it is discovered from railway_token. Set it only to pin a specific workspace and skip the lookup."
+  description = "Railway workspace the project belongs to. Required — the token does not infer it, and projectCreate rejects a request without it."
 }
 
 variable "project_name" {

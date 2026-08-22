@@ -31,6 +31,7 @@ resource "railway_project" "this" {
   name         = var.project_name
   description  = "OLX scraper bot"
   private      = true
+  workspace_id = var.workspace_id
 
   default_environment = {
     name = var.environment_name

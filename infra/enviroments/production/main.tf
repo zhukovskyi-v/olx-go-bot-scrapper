@@ -6,6 +6,9 @@ variable "token" {
 locals {
   repo_root = abspath("${path.module}/../../..")
 
+  # GitHub passes "" for an undefined repository variable; the provider wants null.
+  workspace_id = var.workspace_id == "" ? null : var.workspace_id
+
   # Anything that ends up inside the image. A change here re-runs `railway up`.
   source_files = sort(concat(
     tolist(fileset(local.repo_root, "cmd/**/*.go")),
@@ -31,6 +34,7 @@ resource "railway_project" "this" {
   name         = var.project_name
   description  = "OLX scraper bot"
   private      = true
+  workspace_id = local.workspace_id
 
   default_environment = {
     name = var.environment_name
