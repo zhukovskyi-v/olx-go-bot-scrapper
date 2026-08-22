@@ -1,0 +1,11 @@
+# CI does not use this file — GitHub Actions passes everything as TF_VAR_*.
+# Copy to terraform.tfvars only for a manual run from a workstation.
+# terraform.tfvars is gitignored.
+
+railway_token = "REPLACE_ME"
+workspace_id  = null
+
+db_url = "libsql://<database>-<org>.turso.io?authToken=REPLACE_ME"
+
+sentry_dsn        = ""
+refresh_proxy_url = "https://api-worker-dev.vladyslav-sas.workers.dev/proxy"

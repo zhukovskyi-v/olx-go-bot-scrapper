@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+# railway.com/account/tokens — account-scoped, not a project token.
+railway_token = "REPLACE_ME"
+
+# Leave null when the token can only reach one workspace.
+workspace_id = null
+
+project_name     = "olx-scraper-local"
+environment_name = "production"
+region           = "europe-west4"
+
+# --- application ---
+env    = "prod"
+db_url = "libsql://<database>-<org>.turso.io?authToken=REPLACE_ME"
+
+sentry_dsn           = ""
+rate_limit_rpm       = 60
+cors_allowed_origins = ""
+
+discovery_interval      = "15m"
+detail_refresh_interval = "168h"
+refresh_poll_interval   = "24h"
+refresh_proxy_url       = "https://api-worker-dev.vladyslav-sas.workers.dev/proxy"
+fx_sync_hour            = 13

@@ -1,0 +1,104 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'railway.json'
+      - '.railwayignore'
+      - 'infra/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Second lock on top of the HCP workspace lock. cancel-in-progress stays false:
+# killing a run mid `railway up` leaves the deploy half-applied.
+concurrency:
+  group: railway-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    defaults:
+      run:
+        working-directory: infra/enviroments/production
+
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: '0'
+      # Fills the empty `cloud {}` block in versions.tf.
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+      # Execution Mode = Local, so HCP evaluates no workspace variables.
+      TF_VAR_railway_token: ${{ secrets.RAILWAY_API_TOKEN }}
+      TF_VAR_db_url: ${{ secrets.DB_URL }}
+      TF_VAR_sentry_dsn: ${{ secrets.SENTRY_DSN }}
+      TF_VAR_refresh_proxy_url: ${{ vars.REFRESH_PROXY_URL }}
+      TF_VAR_workspace_id: ${{ vars.RAILWAY_WORKSPACE_ID }}
+      TF_VAR_api_public_domain: ${{ vars.API_PUBLIC_DOMAIN }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # terraform_data.deploy shells out to it to upload the checkout.
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.14.6'
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      # modules/migration is an unused placeholder and is deliberately skipped.
+      - name: Format check
+        run: terraform fmt -check -recursive . ../../modules/api ../../modules/worker
+
+      - name: Init
+        run: terraform init
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          script: |
+            const plan = process.env.PLAN || '';
+            const max = 60000;
+            const body = [
+              '#### Terraform plan — `production`',
+              '```terraform',
+              plan.length > max ? plan.slice(-max) + '\n\n... truncated, see the job log' : plan,
+              '```',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      # `railway up --ci` streams the build, so this step fails when a build fails.
+      - name: Apply
+        if: github.event_name != 'pull_request'
+        run: terraform apply -auto-approve tfplan

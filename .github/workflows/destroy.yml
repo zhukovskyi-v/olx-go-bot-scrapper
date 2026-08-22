@@ -1,0 +1,99 @@
+name: destroy
+
+# Manual only. Tears down the whole production Railway project (api + worker +
+# the project itself). There is no automatic trigger on purpose.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "destroy production" to confirm. Anything else aborts.'
+        required: true
+        type: string
+      mode:
+        description: 'plan = show the destroy plan only; apply = actually destroy.'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+
+# Same group as deploy.yml: a destroy must never race a `railway up`.
+concurrency:
+  group: railway-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Fails before any credential is touched when the phrase does not match.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation phrase
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "destroy production" ]; then
+            echo "::error::confirmation phrase mismatch — expected 'destroy production', got '$CONFIRM'"
+            exit 1
+          fi
+          echo "confirmed, mode=${{ inputs.mode }}"
+
+  terraform:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # Add a required reviewer to this environment in Settings -> Environments to
+    # gate the apply behind a manual approval. Undefined environment = no gate.
+    environment: production-destroy
+
+    defaults:
+      run:
+        working-directory: infra/enviroments/production
+
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: '0'
+      # Fills the empty `cloud {}` block in versions.tf.
+      TF_CLOUD_ORGANIZATION: ${{ vars.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: ${{ vars.TF_WORKSPACE }}
+      # Variables still have to resolve — validation runs even on a destroy.
+      TF_VAR_railway_token: ${{ secrets.RAILWAY_API_TOKEN }}
+      TF_VAR_db_url: ${{ secrets.DB_URL }}
+      TF_VAR_sentry_dsn: ${{ secrets.SENTRY_DSN }}
+      TF_VAR_refresh_proxy_url: ${{ vars.REFRESH_PROXY_URL }}
+      TF_VAR_workspace_id: ${{ vars.RAILWAY_WORKSPACE_ID }}
+      TF_VAR_api_public_domain: ${{ vars.API_PUBLIC_DOMAIN }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.14.6'
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Init
+        run: terraform init
+
+      - name: Plan destroy
+        id: plan
+        run: terraform plan -destroy -no-color -out=tfdestroy
+
+      - name: Summarize plan
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        run: |
+          {
+            echo '### Terraform destroy plan — `production`'
+            echo '```terraform'
+            echo "${PLAN:0:60000}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply destroy
+        if: inputs.mode == 'apply'
+        run: terraform apply -auto-approve tfdestroy
