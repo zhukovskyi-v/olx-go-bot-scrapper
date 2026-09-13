@@ -61,14 +61,14 @@ func NewPrettyHandler(out io.Writer, opts slog.HandlerOptions) *PrettyHandler {
 }
 
 // New returns a slog.Logger configured for the given env tag
-// ("local" → pretty console, "prod" → JSON file, anything else → text stdout debug).
+// ("local" → pretty console, "prod" → JSON on stdout, anything else → text stdout debug).
 func New(env string) *slog.Logger {
 	var handler slog.Handler
 	switch env {
 	case "local":
 		handler = newConsoleHandler(slog.LevelInfo)
 	case "prod":
-		handler = newFileHandler()
+		handler = newJSONHandler()
 	default:
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 	}
@@ -79,11 +79,10 @@ func newConsoleHandler(level slog.Level) slog.Handler {
 	return NewPrettyHandler(os.Stdout, slog.HandlerOptions{Level: level})
 }
 
-func newFileHandler() slog.Handler {
-	file, err := os.OpenFile("slog.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-
-	return slog.NewJSONHandler(file, &slog.HandlerOptions{Level: slog.LevelDebug})
+// newJSONHandler emits structured JSON on stdout. Container platforms (Railway,
+// Cloud Run, Fly) collect stdout only — a log file written inside the container
+// is invisible to them and is discarded with the container when the process
+// exits, which hides the very errors worth reading.
+func newJSONHandler() slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 }

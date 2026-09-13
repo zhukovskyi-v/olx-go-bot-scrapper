@@ -55,9 +55,9 @@ Create a `.env` file (or export the variables directly):
 ```dotenv
 TOKEN=<telegram-bot-token>
 DB_URL=libsql://<your-db>.turso.io?authToken=<token>
-# Or a local file for development:
-# DB_URL=file:./olx.db
-ENV=local            # local | prod | (anything else uses text logging)
+# Must be a libsql:// URL. `file:` DSNs fail at startup — this binary links
+# no sqlite driver (CGO is off). Use a free Turso dev database locally.
+ENV=local            # local (pretty) | prod (JSON) | anything else (text); all on stdout
 ```
 
 Run:

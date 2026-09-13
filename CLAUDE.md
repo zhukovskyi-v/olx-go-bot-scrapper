@@ -16,8 +16,10 @@ go mod tidy
 
 Required env vars (`.env` loaded by `internal/config` or shell):
 - `TOKEN` — Telegram bot token (fatal if missing)
-- `DB_URL` — `libsql://<host>?authToken=<t>` or `file:./olx.db` for local dev (fatal if missing)
-- `ENV` — `local` (pretty console logger), `prod` (JSON to `slog.log`), other (text on stdout)
+- `DB_URL` — `libsql://<host>?authToken=<t>` (fatal if missing). A `file:` DSN does **not**
+  work: no sqlite driver is imported and CGO is off, so it fails at startup with
+  "no sqlite driver present". Use a Turso dev database for local work.
+- `ENV` — `local` (pretty console logger), `prod` (JSON to stdout), other (text on stdout)
 
 ## Architecture
 

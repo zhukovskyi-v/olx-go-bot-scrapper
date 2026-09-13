@@ -14,8 +14,9 @@ RUN go mod download
 
 COPY . .
 
-# CGO disabled: libsql-client-go is pure Go, so we can produce a static binary
-# that runs on a scratch/distroless base.
+# CGO disabled: the libsql *remote* driver is pure Go, so we can produce a static
+# binary that runs on a scratch/distroless base. The flip side: no local sqlite
+# driver is linked in, so DB_URL must be a libsql:// URL (see below).
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -trimpath -ldflags="-s -w" -o /out/bot ./cmd/bot
 
@@ -28,14 +29,14 @@ COPY --from=builder /out/bot /app/bot
 
 # Cloud-friendly defaults:
 #   TOKEN  — Telegram bot token (set at deploy time, required).
-#   DB_URL — `libsql://<host>?authToken=<t>` (recommended) or
-#            `file:/data/olx.db` if you mount a volume at /data.
-#   ENV    — leave unset for text logs to stdout (Cloud Run / Fly / Railway
-#            collect stdout). Avoid `prod` here: it writes to ./slog.log, which
-#            is invisible to log aggregators and lost on container restart.
+#   DB_URL — `libsql://<host>?authToken=<t>` (Turso). A `file:` DSN does NOT
+#            work in this image: libsql-client-go hands local files to a sqlite
+#            driver, and none is linked in (CGO off, no driver import). It fails
+#            at startup with "no sqlite driver present".
+#   ENV    — `prod` for structured JSON logs on stdout, unset for text logs on
+#            stdout. Either is collected by Cloud Run / Fly / Railway.
 ENV ENV=""
 
-# For file:-backed SQLite, attach a Railway Volume mounted at /data and set
-# DB_URL=file:/data/olx.db. Otherwise use Turso libsql://... — no volume needed.
+# No volume is required: state lives in the remote libsql database.
 
 ENTRYPOINT ["/app/bot"]
