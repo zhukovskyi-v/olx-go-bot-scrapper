@@ -1,17 +1,33 @@
 package storage
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
+// newTestStore opens a Store for tests.
+//
+// Without LIBSQL_TEST_DSN it falls back to a file: DSN, which this binary cannot
+// serve — no sqlite driver is linked in (CGO is off) — so the whole suite skips.
+// Point LIBSQL_TEST_DSN at a *freshly started* libsql server to actually run it;
+// the tests share one database and use fixed user ids, so a reused server carries
+// rows over and breaks the local_id assertions:
+//
+//	docker run --rm -d -p 8080:8080 ghcr.io/tursodatabase/libsql-server:latest
+//	LIBSQL_TEST_DSN=http://localhost:8080 go test ./internal/storage
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	dir := t.TempDir()
-	dsn := "file://" + filepath.Join(dir, "test.db")
+	dsn := os.Getenv("LIBSQL_TEST_DSN")
+	if dsn == "" {
+		dsn = "file://" + filepath.Join(t.TempDir(), "test.db")
+	}
 	s, err := Open(dsn)
 	if err != nil {
-		t.Skipf("libsql file driver unavailable: %v", err)
+		t.Skipf("libsql unavailable (set LIBSQL_TEST_DSN to run this suite): %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	return s
@@ -209,5 +225,38 @@ func TestPauseAllResumeAll(t *testing.T) {
 	}
 	if len(urls) != 2 {
 		t.Fatalf("expected 2 resumed, got %d", len(urls))
+	}
+}
+
+// Regression: AddWatch used to run a read-then-write transaction, whose lock
+// upgrade SQLite rejects outright with "database is locked" once any other
+// connection has written. The watcher poll loops write via MarkSeen constantly,
+// so /addurl failed for every user with an active watch.
+func TestAddWatch_SucceedsWhilePollLoopsWrite(t *testing.T) {
+	s := newTestStore(t)
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = s.MarkSeen(int64(900000+n), fmt.Sprintf("ad-%d-%d", n, time.Now().UnixNano()))
+			}
+		}(i)
+	}
+	t.Cleanup(func() { close(stop); wg.Wait() })
+	time.Sleep(200 * time.Millisecond)
+
+	for i := 0; i < 20; i++ {
+		if _, err := s.AddWatch(int64(800000+i), fmt.Sprintf("https://www.olx.ua/uk/list/%d", i)); err != nil {
+			t.Fatalf("AddWatch #%d under concurrent writes: %v", i, err)
+		}
 	}
 }

@@ -62,46 +62,36 @@ func (s *Store) Close() error {
 
 // AddWatch inserts a watch for the user if not present and returns the local_id.
 // If the URL already exists for this user, returns the existing local_id without error.
+//
+// Deliberately transaction-free. A transaction that reads first and writes later
+// holds only a shared lock and must upgrade it on the INSERT; SQLite refuses that
+// upgrade with SQLITE_BUSY ("database is locked") as soon as another connection
+// has written in between, and it fails immediately rather than waiting, so a
+// busy_timeout does not help. The watcher poll loops write via MarkSeen
+// continuously, so under any real load that upgrade essentially always loses.
+//
+// Computing local_id inside the INSERT keeps it correct: SQLite serializes
+// writers, so the MAX subquery is evaluated while this statement holds the write
+// lock and cannot race a concurrent AddWatch for the same user.
 func (s *Store) AddWatch(userID int64, url string) (int, error) {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var existing int
-	err = tx.QueryRow(
-		`SELECT local_id FROM watches WHERE user_id = ? AND url = ?`,
-		userID, url,
-	).Scan(&existing)
-	if err == nil {
-		if err := tx.Commit(); err != nil {
-			return 0, err
-		}
-		return existing, nil
-	}
-	if err != sql.ErrNoRows {
-		return 0, err
-	}
-
-	var next int
-	if err := tx.QueryRow(
-		`SELECT COALESCE(MAX(local_id), 0) + 1 FROM watches WHERE user_id = ?`,
-		userID,
-	).Scan(&next); err != nil {
-		return 0, err
-	}
-
-	if _, err := tx.Exec(
-		`INSERT INTO watches (user_id, url, created_at, local_id) VALUES (?, ?, ?, ?)`,
-		userID, url, time.Now().Unix(), next,
+	if _, err := s.db.Exec(
+		`INSERT INTO watches (user_id, url, created_at, local_id)
+		 VALUES (?, ?, ?, (SELECT COALESCE(MAX(local_id), 0) + 1 FROM watches WHERE user_id = ?))
+		 ON CONFLICT (user_id, url) DO NOTHING`,
+		userID, url, time.Now().Unix(), userID,
 	); err != nil {
 		return 0, err
 	}
-	if err := tx.Commit(); err != nil {
+
+	// Covers both the row just inserted and a pre-existing one (conflict ignored).
+	var localID int
+	if err := s.db.QueryRow(
+		`SELECT local_id FROM watches WHERE user_id = ? AND url = ?`,
+		userID, url,
+	).Scan(&localID); err != nil {
 		return 0, err
 	}
-	return next, nil
+	return localID, nil
 }
 
 func (s *Store) RemoveWatchByLocalID(userID int64, localID int) (string, error) {
