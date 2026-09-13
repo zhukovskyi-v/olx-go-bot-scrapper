@@ -10,9 +10,8 @@ terraform {
 }
 
 resource "railway_service" "this" {
-  name        = var.service_name
-  project_id  = var.project_id
-  config_path = var.config_path
+  name       = var.service_name
+  project_id = var.project_id
 
   regions = [{
     region       = var.region
