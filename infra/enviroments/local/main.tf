@@ -13,8 +13,7 @@ locals {
     [
       "go.mod",
       "go.sum",
-      "Dockerfile",
-      "railway.json",
+      "Dockerfile"
     ],
   ))
 
