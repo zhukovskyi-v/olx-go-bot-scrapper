@@ -37,9 +37,13 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	// telegram.LoggingPoller instead of tele.LongPoller: the stock poller
+	// silently discards every getUpdates error unless Verbose dumps all API
+	// traffic, which hides a 409 conflict — the failure that makes the bot
+	// receive nothing while looking perfectly healthy.
 	tb, err := tele.NewBot(tele.Settings{
 		Token:   cfg.Token,
-		Poller:  &tele.LongPoller{Timeout: 10 * time.Second},
+		Poller:  &telegram.LoggingPoller{Timeout: 10 * time.Second, Log: log},
 		Verbose: false,
 	})
 	if err != nil {
